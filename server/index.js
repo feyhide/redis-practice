@@ -3,11 +3,12 @@ import { productPromise } from './api/products.js'
 import { Redis } from 'ioredis'
 import dotenv from "dotenv"
 import { addorder, orderPromise } from './api/order.js'
+import { deleteCachedData, getCachedData } from './middleware/redis.js'
 dotenv.config()
 
 const app = express()
 
-const redis = new Redis({
+export const redis = new Redis({
     host: process.env.REDIS_HOST,
     port: process.env.REDIS_PORT,
     password: process.env.REDIS_PASSWORD
@@ -24,38 +25,26 @@ app.get("/",(req,res)=>{
     res.send("HELLO WORLD")
 })
 
-app.get("/products",async (req,res)=>{
-    
-    let products = await redis.get("products")
-        
-    if(products){
-        return res.json({products:JSON.parse(products)})
-    }
+app.get("/products", getCachedData("products"),async (req,res)=>{
 
-    products = await productPromise()
+    const products = await productPromise()
     await redis.setex("products",20,JSON.stringify(products.products))
-    res.json(products)
+    return res.json(products)
 })
 
-app.post("/addorder",async (req,res)=>{
+app.post("/addorder",deleteCachedData("order"),async (req,res)=>{
     const {order} = req.body
     
     addorder(order)
-    await redis.del("order")
     
-    res.json("ordered") 
+    return res.json("ordered") 
 })
 
-app.get("/getorder",async (req,res)=>{
-    let order = await redis.get("order")
-        
-    if(order){
-        return res.json({order:JSON.parse(order)})
-    }
+app.get("/getorder", getCachedData("order"),async (req,res)=>{
 
-    order = await orderPromise()
+    const order = await orderPromise()
     await redis.setex("order",15,JSON.stringify(order.order))
-    res.json(order)
+    return res.json(order)
 })
 
 
